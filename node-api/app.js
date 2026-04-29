@@ -8,6 +8,9 @@ const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const _ = require('lodash');
 
+const dataCleaner = require('./data_cleaner');
+const { DataCleaner } = dataCleaner;
+
 require('dotenv').config();
 
 const app = express();
@@ -52,36 +55,9 @@ function saveData(filePath, data) {
   }
 }
 
-function filterSpecialChars(text) {
-  if (typeof text !== 'string') return text;
-  
-  let filtered = text
-    .replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F-\x9F]/g, '')
-    .replace(/[^\u4e00-\u9fa5\u0020-\u007E\uFF00-\uFFEF\u3000-\u303F\u2000-\u206F]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  
-  return filtered;
-}
-
 function cleanProductData(product) {
-  const cleaned = {};
+  const cleaned = dataCleaner.cleanProduct(product);
   
-  for (const [key, value] of Object.entries(product)) {
-    if (typeof value === 'string') {
-      cleaned[key] = filterSpecialChars(value);
-    } else if (Array.isArray(value)) {
-      cleaned[key] = value.map(item => 
-        typeof item === 'string' ? filterSpecialChars(item) : item
-      );
-    } else if (typeof value === 'object' && value !== null) {
-      cleaned[key] = cleanProductData(value);
-    } else {
-      cleaned[key] = value;
-    }
-  }
-  
-  cleaned.updatedAt = new Date().toISOString();
   if (!cleaned.id) {
     cleaned.id = uuidv4();
   }
@@ -90,23 +66,8 @@ function cleanProductData(product) {
 }
 
 function cleanCommentData(comment) {
-  const cleaned = {};
+  const cleaned = dataCleaner.cleanComment(comment);
   
-  for (const [key, value] of Object.entries(comment)) {
-    if (typeof value === 'string') {
-      cleaned[key] = filterSpecialChars(value);
-    } else if (Array.isArray(value)) {
-      cleaned[key] = value.map(item => 
-        typeof item === 'string' ? filterSpecialChars(item) : item
-      );
-    } else if (typeof value === 'object' && value !== null) {
-      cleaned[key] = cleanCommentData(value);
-    } else {
-      cleaned[key] = value;
-    }
-  }
-  
-  cleaned.updatedAt = new Date().toISOString();
   if (!cleaned.id) {
     cleaned.id = uuidv4();
   }

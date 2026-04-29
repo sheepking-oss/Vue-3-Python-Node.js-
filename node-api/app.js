@@ -55,20 +55,105 @@ function saveData(filePath, data) {
 function filterSpecialChars(text) {
   if (typeof text !== 'string') return text;
   
-  let filtered = text
-    .replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F-\x9F]/g, '')
-    .replace(/[^\u4e00-\u9fa5\u0020-\u007E\uFF00-\uFFEF\u3000-\u303F\u2000-\u206F]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  let filtered = text;
+  
+  filtered = filtered.replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F-\x9F]/g, '');
+  
+  filtered = filtered.replace(/[\u200B-\u200D\uFEFF\u202A-\u202E]/g, '');
+  
+  filtered = filtered.replace(/[\u0300-\u036F]/g, '');
+  
+  const safePattern = /[^\u4e00-\u9fa5\u3400-\u4DBF\u20000-\u2A6DF\s0-9a-zA-Z\-_.,:;!?'"()\[\]{}<>+=@#$%^&*\/\\|~`￥¥€£$₽₹฿₩₫₪₴₡₢₣₤₥₦₧₨₩₪₫€₭₮₯₰₱₲₳₴₵₶₷₸₹₺₻₼₽₾₿]/g;
+  filtered = filtered.replace(safePattern, '');
+  
+  filtered = filtered.replace(/\s+/g, ' ');
+  
+  filtered = filtered.trim();
   
   return filtered;
+}
+
+function filterPriceValue(text) {
+  if (typeof text === 'number') {
+    return text;
+  }
+  
+  if (typeof text !== 'string') {
+    return text;
+  }
+  
+  let cleaned = text.trim();
+  
+  cleaned = cleaned.replace(/[\x00-\x1F\x7F-\x9F\u200B-\u200D\uFEFF]/g, '');
+  
+  cleaned = cleaned.replace(/[￥¥€£$₽₹฿₩₫₪₴₡₢₣₤₥₦₧₨₩₪₫€₭₮₯₰₱₲₳₴₵₶₷₸₹₺₻₼₽₾₿]/g, '');
+  
+  cleaned = cleaned.replace(/[元块\\\/]/g, '');
+  
+  cleaned = cleaned.replace(/[^\d.\-]/g, '');
+  
+  const priceMatch = cleaned.match(/-?\d+\.?\d*/);
+  if (priceMatch) {
+    const priceStr = priceMatch[0];
+    const price = parseFloat(priceStr);
+    if (!isNaN(price) && price >= 0) {
+      return price;
+    }
+  }
+  
+  return 0;
+}
+
+function normalizePriceText(text) {
+  if (typeof text === 'number') {
+    return text;
+  }
+  
+  if (typeof text !== 'string') {
+    return text;
+  }
+  
+  let normalized = text;
+  
+  normalized = normalized.replace(/[０-９]/g, (char) => {
+    return String.fromCharCode(char.charCodeAt(0) - 0xFEE0);
+  });
+  
+  normalized = normalized.replace(/[．。]/g, '.');
+  
+  normalized = normalized.replace(/[，]/g, ',');
+  
+  return normalized;
 }
 
 function cleanProductData(product) {
   const cleaned = {};
   
+  const priceFields = ['price', 'original_price', 'current_price', 'sale_price', 'min_price', 'max_price'];
+  const numericFields = ['sales_count', 'comment_count', 'rating', 'key_count', 'useful_count', 'score'];
+  
   for (const [key, value] of Object.entries(product)) {
-    if (typeof value === 'string') {
+    if (priceFields.includes(key)) {
+      if (typeof value === 'string') {
+        const normalized = normalizePriceText(value);
+        cleaned[key] = filterPriceValue(normalized);
+      } else if (typeof value === 'number') {
+        cleaned[key] = value;
+      } else {
+        cleaned[key] = filterPriceValue(value);
+      }
+    }
+    else if (numericFields.includes(key)) {
+      if (typeof value === 'number') {
+        cleaned[key] = value;
+      } else if (typeof value === 'string') {
+        const parsed = parseFloat(value);
+        cleaned[key] = isNaN(parsed) ? value : parsed;
+      } else {
+        cleaned[key] = value;
+      }
+    }
+    else if (typeof value === 'string') {
       cleaned[key] = filterSpecialChars(value);
     } else if (Array.isArray(value)) {
       cleaned[key] = value.map(item => 
@@ -92,8 +177,20 @@ function cleanProductData(product) {
 function cleanCommentData(comment) {
   const cleaned = {};
   
+  const numericFields = ['score', 'useful_count'];
+  
   for (const [key, value] of Object.entries(comment)) {
-    if (typeof value === 'string') {
+    if (numericFields.includes(key)) {
+      if (typeof value === 'number') {
+        cleaned[key] = value;
+      } else if (typeof value === 'string') {
+        const parsed = parseInt(value, 10);
+        cleaned[key] = isNaN(parsed) ? value : parsed;
+      } else {
+        cleaned[key] = value;
+      }
+    }
+    else if (typeof value === 'string') {
       cleaned[key] = filterSpecialChars(value);
     } else if (Array.isArray(value)) {
       cleaned[key] = value.map(item => 

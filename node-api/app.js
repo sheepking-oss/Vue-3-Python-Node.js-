@@ -8,6 +8,9 @@ const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const _ = require('lodash');
 
+const dataCleaner = require('./data_cleaner');
+const { DataCleaner } = dataCleaner;
+
 require('dotenv').config();
 
 const app = express();
@@ -52,121 +55,9 @@ function saveData(filePath, data) {
   }
 }
 
-function filterSpecialChars(text) {
-  if (typeof text !== 'string') return text;
-  
-  let filtered = text;
-  
-  filtered = filtered.replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F-\x9F]/g, '');
-  
-  filtered = filtered.replace(/[\u200B-\u200D\uFEFF\u202A-\u202E]/g, '');
-  
-  filtered = filtered.replace(/[\u0300-\u036F]/g, '');
-  
-  const safePattern = /[^\u4e00-\u9fa5\u3400-\u4DBF\u20000-\u2A6DF\s0-9a-zA-Z\-_.,:;!?'"()\[\]{}<>+=@#$%^&*\/\\|~`￥¥€£$₽₹฿₩₫₪₴₡₢₣₤₥₦₧₨₩₪₫€₭₮₯₰₱₲₳₴₵₶₷₸₹₺₻₼₽₾₿]/g;
-  filtered = filtered.replace(safePattern, '');
-  
-  filtered = filtered.replace(/\s+/g, ' ');
-  
-  filtered = filtered.trim();
-  
-  return filtered;
-}
-
-function filterPriceValue(text) {
-  if (typeof text === 'number') {
-    return text;
-  }
-  
-  if (typeof text !== 'string') {
-    return text;
-  }
-  
-  let cleaned = text.trim();
-  
-  cleaned = cleaned.replace(/[\x00-\x1F\x7F-\x9F\u200B-\u200D\uFEFF]/g, '');
-  
-  cleaned = cleaned.replace(/[￥¥€£$₽₹฿₩₫₪₴₡₢₣₤₥₦₧₨₩₪₫€₭₮₯₰₱₲₳₴₵₶₷₸₹₺₻₼₽₾₿]/g, '');
-  
-  cleaned = cleaned.replace(/[元块\\\/]/g, '');
-  
-  cleaned = cleaned.replace(/[^\d.\-]/g, '');
-  
-  const priceMatch = cleaned.match(/-?\d+\.?\d*/);
-  if (priceMatch) {
-    const priceStr = priceMatch[0];
-    const price = parseFloat(priceStr);
-    if (!isNaN(price) && price >= 0) {
-      return price;
-    }
-  }
-  
-  return 0;
-}
-
-function normalizePriceText(text) {
-  if (typeof text === 'number') {
-    return text;
-  }
-  
-  if (typeof text !== 'string') {
-    return text;
-  }
-  
-  let normalized = text;
-  
-  normalized = normalized.replace(/[０-９]/g, (char) => {
-    return String.fromCharCode(char.charCodeAt(0) - 0xFEE0);
-  });
-  
-  normalized = normalized.replace(/[．。]/g, '.');
-  
-  normalized = normalized.replace(/[，]/g, ',');
-  
-  return normalized;
-}
-
 function cleanProductData(product) {
-  const cleaned = {};
+  const cleaned = dataCleaner.cleanProduct(product);
   
-  const priceFields = ['price', 'original_price', 'current_price', 'sale_price', 'min_price', 'max_price'];
-  const numericFields = ['sales_count', 'comment_count', 'rating', 'key_count', 'useful_count', 'score'];
-  
-  for (const [key, value] of Object.entries(product)) {
-    if (priceFields.includes(key)) {
-      if (typeof value === 'string') {
-        const normalized = normalizePriceText(value);
-        cleaned[key] = filterPriceValue(normalized);
-      } else if (typeof value === 'number') {
-        cleaned[key] = value;
-      } else {
-        cleaned[key] = filterPriceValue(value);
-      }
-    }
-    else if (numericFields.includes(key)) {
-      if (typeof value === 'number') {
-        cleaned[key] = value;
-      } else if (typeof value === 'string') {
-        const parsed = parseFloat(value);
-        cleaned[key] = isNaN(parsed) ? value : parsed;
-      } else {
-        cleaned[key] = value;
-      }
-    }
-    else if (typeof value === 'string') {
-      cleaned[key] = filterSpecialChars(value);
-    } else if (Array.isArray(value)) {
-      cleaned[key] = value.map(item => 
-        typeof item === 'string' ? filterSpecialChars(item) : item
-      );
-    } else if (typeof value === 'object' && value !== null) {
-      cleaned[key] = cleanProductData(value);
-    } else {
-      cleaned[key] = value;
-    }
-  }
-  
-  cleaned.updatedAt = new Date().toISOString();
   if (!cleaned.id) {
     cleaned.id = uuidv4();
   }
@@ -175,35 +66,8 @@ function cleanProductData(product) {
 }
 
 function cleanCommentData(comment) {
-  const cleaned = {};
+  const cleaned = dataCleaner.cleanComment(comment);
   
-  const numericFields = ['score', 'useful_count'];
-  
-  for (const [key, value] of Object.entries(comment)) {
-    if (numericFields.includes(key)) {
-      if (typeof value === 'number') {
-        cleaned[key] = value;
-      } else if (typeof value === 'string') {
-        const parsed = parseInt(value, 10);
-        cleaned[key] = isNaN(parsed) ? value : parsed;
-      } else {
-        cleaned[key] = value;
-      }
-    }
-    else if (typeof value === 'string') {
-      cleaned[key] = filterSpecialChars(value);
-    } else if (Array.isArray(value)) {
-      cleaned[key] = value.map(item => 
-        typeof item === 'string' ? filterSpecialChars(item) : item
-      );
-    } else if (typeof value === 'object' && value !== null) {
-      cleaned[key] = cleanCommentData(value);
-    } else {
-      cleaned[key] = value;
-    }
-  }
-  
-  cleaned.updatedAt = new Date().toISOString();
   if (!cleaned.id) {
     cleaned.id = uuidv4();
   }
